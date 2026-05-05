@@ -34,7 +34,10 @@ import {
 } from '@nx-projects/projects';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+
+/** Select value for “filter to tasks with no assignee” */
+const TASK_FILTER_UNASSIGNED = '__unassigned__';
 
 const STATUSES: ProjectStatus[] = [
   'planning',
@@ -123,6 +126,9 @@ export default function ProjectDetailPage() {
   const [taskEndDate, setTaskEndDate] = useState('');
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
 
+  const [taskFilterStatus, setTaskFilterStatus] = useState<TaskStatus | ''>('');
+  const [taskFilterAssignee, setTaskFilterAssignee] = useState<string>('');
+
   useEffect(() => {
     if (!mePending && (meError || user === null)) router.replace('/login');
   }, [mePending, meError, user, router]);
@@ -134,6 +140,19 @@ export default function ProjectDetailPage() {
       setStatus(project.status);
     }
   }, [project, projectEditOpen]);
+
+  const filteredTasks = useMemo(() => {
+    if (!tasks?.length) return [];
+    return tasks.filter((t) => {
+      if (taskFilterStatus && t.status !== taskFilterStatus) return false;
+      if (taskFilterAssignee === TASK_FILTER_UNASSIGNED) {
+        if (t.assigneeId != null) return false;
+      } else if (taskFilterAssignee) {
+        if (t.assigneeId !== taskFilterAssignee) return false;
+      }
+      return true;
+    });
+  }, [tasks, taskFilterStatus, taskFilterAssignee]);
 
   function openCreateTask() {
     setEditingTaskId(null);
@@ -290,6 +309,9 @@ export default function ProjectDetailPage() {
   const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+  const filterSelectClass =
+    'flex h-8 min-h-8 w-full min-w-0 rounded-md border border-input bg-transparent px-2 py-0 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <header className="z-40 shrink-0 border-b border-border bg-card">
@@ -326,9 +348,9 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 sm:flex-row">
-          <div className="shrink-0 sm:w-1/4 sm:min-w-0">
-            <Card>
-              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+          <div className="flex min-h-0 w-full shrink-0 flex-col sm:h-full sm:w-1/4 sm:min-w-0">
+            <Card className="flex min-h-0 flex-col overflow-hidden sm:h-full">
+              <CardHeader className="shrink-0 flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
                 <div className="space-y-1">
                   <CardTitle>Team</CardTitle>
                   <CardDescription>
@@ -338,7 +360,7 @@ export default function ProjectDetailPage() {
                   </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="min-h-0 max-h-[100dvh] space-y-4 overflow-y-auto overscroll-y-contain sm:max-h-none sm:flex-1">
                 {membersLoading ? (
                   <p className="text-sm text-muted-foreground">Loading team…</p>
                 ) : membersData ? (
@@ -399,72 +421,126 @@ export default function ProjectDetailPage() {
           </div>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <Card className="flex min-h-0 flex-1 flex-col">
-              <CardHeader className="shrink-0 flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
-                <div className="space-y-1">
-                  <CardTitle>Tasks</CardTitle>
-                  <CardDescription>Work items for this project.</CardDescription>
+              <CardHeader className="shrink-0 flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 p-4 pb-3">
+                <div className="min-w-0 space-y-0">
+                  <CardTitle className="text-base">Tasks</CardTitle>
+                  <CardDescription className="text-xs leading-snug">
+                    Work items for this project.
+                  </CardDescription>
                 </div>
-                <Button type="button" onClick={openCreateTask}>
+                <Button type="button" size="sm" onClick={openCreateTask}>
                   Add task
                 </Button>
               </CardHeader>
-              <CardContent className="flex min-h-0 flex-1 flex-col">
+              <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-0">
                 <div className="flex min-h-0 flex-1 flex-col">
-                  <h3 className="mb-3 shrink-0 text-sm font-medium text-muted-foreground">
-                    Task list
-                  </h3>
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-                    {tasksLoading ? (
-                      <p className="text-sm text-muted-foreground">Loading tasks…</p>
-                    ) : !tasks?.length ? (
-                      <p className="text-sm text-muted-foreground">No tasks yet.</p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {tasks.map((t) => (
-                          <li
-                            key={t.id}
-                            className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-card/50 px-3 py-2"
+                  {tasksLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading tasks…</p>
+                  ) : !tasks?.length ? (
+                    <p className="text-sm text-muted-foreground">No tasks yet.</p>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="flex min-w-[min(100%,11rem)] flex-[1_1_10rem] items-center gap-2">
+                          <Label
+                            htmlFor="task-filter-status"
+                            className="mb-0 shrink-0 text-xs font-normal text-muted-foreground"
                           >
-                            <div className="min-w-0 flex-1 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-medium">{t.title}</span>
-                                <Badge variant={taskStatusBadgeVariant(t.status)}>
-                                  {t.status.replace(/_/g, ' ')}
-                                </Badge>
-                              </div>
-                              {t.description ? (
-                                <p className="text-sm text-muted-foreground">{t.description}</p>
-                              ) : null}
-                              <p className="text-xs text-muted-foreground">
-                                {t.startDate || t.endDate ? (
-                                  <>
-                                    {t.startDate
-                                      ? `Start ${new Date(t.startDate).toLocaleDateString()}`
-                                      : null}
-                                    {t.startDate && t.endDate ? ' · ' : null}
-                                    {t.endDate
-                                      ? `End ${new Date(t.endDate).toLocaleDateString()}`
-                                      : null}
-                                    {' · '}
-                                  </>
-                                ) : null}
-                                Assignee: {t.assignee?.email ?? '—'} · Created{' '}
-                                {new Date(t.createdAt).toLocaleString()}
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditTask(t)}
-                            >
-                              Edit
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                            Status
+                          </Label>
+                          <select
+                            id="task-filter-status"
+                            className={filterSelectClass}
+                            value={taskFilterStatus}
+                            onChange={(ev) =>
+                              setTaskFilterStatus(ev.target.value as TaskStatus | '')
+                            }
+                          >
+                            <option value="">All</option>
+                            {TASK_STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s.replace(/_/g, ' ')}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex min-w-0 flex-[4_1_14rem] items-center gap-2">
+                          <Label
+                            htmlFor="task-filter-assignee"
+                            className="mb-0 shrink-0 text-xs font-normal text-muted-foreground"
+                          >
+                            Assignee
+                          </Label>
+                          <select
+                            id="task-filter-assignee"
+                            className={filterSelectClass}
+                            value={taskFilterAssignee}
+                            onChange={(ev) => setTaskFilterAssignee(ev.target.value)}
+                          >
+                            <option value="">All</option>
+                            <option value={TASK_FILTER_UNASSIGNED}>Unassigned</option>
+                            {assigneeOptions.map((o) => (
+                              <option key={o.userId} value={o.userId}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+                        {filteredTasks.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No tasks match the selected filters.
+                          </p>
+                        ) : (
+                          <ul className="space-y-3">
+                            {filteredTasks.map((t) => (
+                              <li
+                                key={t.id}
+                                className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-card/50 px-3 py-2"
+                              >
+                                <div className="min-w-0 flex-1 space-y-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-medium">{t.title}</span>
+                                    <Badge variant={taskStatusBadgeVariant(t.status)}>
+                                      {t.status.replace(/_/g, ' ')}
+                                    </Badge>
+                                  </div>
+                                  {t.description ? (
+                                    <p className="text-sm text-muted-foreground">{t.description}</p>
+                                  ) : null}
+                                  <p className="text-xs text-muted-foreground">
+                                    {t.startDate || t.endDate ? (
+                                      <>
+                                        {t.startDate
+                                          ? `Start ${new Date(t.startDate).toLocaleDateString()}`
+                                          : null}
+                                        {t.startDate && t.endDate ? ' · ' : null}
+                                        {t.endDate
+                                          ? `End ${new Date(t.endDate).toLocaleDateString()}`
+                                          : null}
+                                        {' · '}
+                                      </>
+                                    ) : null}
+                                    Assignee: {t.assignee?.email ?? '—'} · Created{' '}
+                                    {new Date(t.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openEditTask(t)}
+                                >
+                                  Edit
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
