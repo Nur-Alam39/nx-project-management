@@ -160,11 +160,11 @@ export default function ProjectsPage() {
           ) : !projects?.length ? (
             <p className="text-muted-foreground">No projects yet.</p>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid gap-4 sm:grid-cols-3">
               {projects.map((p: Project) => (
                 <li key={p.id}>
                   <Link href={`/projects/${p.id}`}>
-                    <Card className="transition-colors hover:bg-accent/50">
+                    <Card className="transition-colors hover:bg-accent/50 h-full">
                       <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                         <CardTitle className="text-base">{p.name}</CardTitle>
                         <Badge variant={statusVariant(p.status)}>{p.status}</Badge>

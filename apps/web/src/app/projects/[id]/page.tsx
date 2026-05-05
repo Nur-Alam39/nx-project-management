@@ -304,8 +304,8 @@ export default function ProjectDetailPage() {
         </div>
       </header>
 
-      <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 overflow-y-auto px-4 py-8">
-        <Card>
+      <main className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col overflow-hidden px-4 py-4">
+        <Card className="shrink-0">
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
             <div className="space-y-1">
               <CardTitle className="text-xl">{project.name}</CardTitle>
@@ -325,77 +325,151 @@ export default function ProjectDetailPage() {
             </p>
           </CardContent>
         </Card>
-
-        <Card className="mt-8">
-          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Team</CardTitle>
-              <CardDescription>
-                {isOwner
-                  ? 'Invite collaborators by email (they must already have an account).'
-                  : 'People with access to this project.'}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {membersLoading ? (
-              <p className="text-sm text-muted-foreground">Loading team…</p>
-            ) : membersData ? (
-              <>
-                <ul className="space-y-2">
-                  <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                    <span className="break-all">{membersData.owner.email}</span>
-                    <Badge variant="outline">Owner</Badge>
-                  </li>
-                  {membersData.members.map((m) => (
-                    <li
-                      key={m.userId}
-                      className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                    >
-                      <span className="break-all">{m.email}</span>
-                      {isOwner ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={removeMember.isPending}
-                          onClick={() => void onRemoveMember(m.userId)}
+        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 sm:flex-row">
+          <div className="shrink-0 sm:w-1/4 sm:min-w-0">
+            <Card>
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+                <div className="space-y-1">
+                  <CardTitle>Team</CardTitle>
+                  <CardDescription>
+                    {isOwner
+                      ? 'Invite collaborators by email (they must already have an account).'
+                      : 'People with access to this project.'}
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {membersLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading team…</p>
+                ) : membersData ? (
+                  <>
+                    <ul className="space-y-2">
+                      <li className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="break-all">{membersData.owner.email}</span>
+                        <Badge variant="outline">Owner</Badge>
+                      </li>
+                      {membersData.members.map((m) => (
+                        <li
+                          key={m.userId}
+                          className="flex flex-wrap items-center justify-between gap-2 text-sm"
                         >
-                          Remove
+                          <span className="break-all">{m.email}</span>
+                          {isOwner ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={removeMember.isPending}
+                              onClick={() => void onRemoveMember(m.userId)}
+                            >
+                              Remove
+                            </Button>
+                          ) : (
+                            <Badge variant="secondary">Member</Badge>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    {isOwner ? (
+                      <form onSubmit={(ev) => void onAddMember(ev)} className="flex flex-wrap gap-2">
+                        <Input
+                          type="email"
+                          placeholder="colleague@example.com"
+                          value={memberEmail}
+                          onChange={(ev) => setMemberEmail(ev.target.value)}
+                          className="min-w-[200px] flex-1"
+                          autoComplete="email"
+                        />
+                        <Button type="submit" disabled={addMember.isPending}>
+                          {addMember.isPending ? 'Adding…' : 'Add member'}
                         </Button>
-                      ) : (
-                        <Badge variant="secondary">Member</Badge>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                {isOwner ? (
-                  <form onSubmit={(ev) => void onAddMember(ev)} className="flex flex-wrap gap-2">
-                    <Input
-                      type="email"
-                      placeholder="colleague@example.com"
-                      value={memberEmail}
-                      onChange={(ev) => setMemberEmail(ev.target.value)}
-                      className="min-w-[200px] flex-1"
-                      autoComplete="email"
-                    />
-                    <Button type="submit" disabled={addMember.isPending}>
-                      {addMember.isPending ? 'Adding…' : 'Add member'}
-                    </Button>
-                  </form>
-                ) : null}
-                {addMember.isError ? (
-                  <p className="text-sm text-destructive">
-                    {(addMember.error as Error)?.message ?? 'Could not add member'}
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Could not load team.</p>
-            )}
-          </CardContent>
-        </Card>
-
+                      </form>
+                    ) : null}
+                    {addMember.isError ? (
+                      <p className="text-sm text-destructive">
+                        {(addMember.error as Error)?.message ?? 'Could not add member'}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Could not load team.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <Card className="flex min-h-0 flex-1 flex-col">
+              <CardHeader className="shrink-0 flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+                <div className="space-y-1">
+                  <CardTitle>Tasks</CardTitle>
+                  <CardDescription>Work items for this project.</CardDescription>
+                </div>
+                <Button type="button" onClick={openCreateTask}>
+                  Add task
+                </Button>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <h3 className="mb-3 shrink-0 text-sm font-medium text-muted-foreground">
+                    Task list
+                  </h3>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+                    {tasksLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading tasks…</p>
+                    ) : !tasks?.length ? (
+                      <p className="text-sm text-muted-foreground">No tasks yet.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {tasks.map((t) => (
+                          <li
+                            key={t.id}
+                            className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-card/50 px-3 py-2"
+                          >
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium">{t.title}</span>
+                                <Badge variant={taskStatusBadgeVariant(t.status)}>
+                                  {t.status.replace(/_/g, ' ')}
+                                </Badge>
+                              </div>
+                              {t.description ? (
+                                <p className="text-sm text-muted-foreground">{t.description}</p>
+                              ) : null}
+                              <p className="text-xs text-muted-foreground">
+                                {t.startDate || t.endDate ? (
+                                  <>
+                                    {t.startDate
+                                      ? `Start ${new Date(t.startDate).toLocaleDateString()}`
+                                      : null}
+                                    {t.startDate && t.endDate ? ' · ' : null}
+                                    {t.endDate
+                                      ? `End ${new Date(t.endDate).toLocaleDateString()}`
+                                      : null}
+                                    {' · '}
+                                  </>
+                                ) : null}
+                                Assignee: {t.assignee?.email ?? '—'} · Created{' '}
+                                {new Date(t.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditTask(t)}
+                            >
+                              Edit
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
         <Dialog open={projectEditOpen} onOpenChange={setProjectEditOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -467,76 +541,6 @@ export default function ProjectDetailPage() {
             </form>
           </DialogContent>
         </Dialog>
-
-        <Card className="mt-8">
-          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Tasks</CardTitle>
-              <CardDescription>Work items for this project.</CardDescription>
-            </div>
-            <Button type="button" onClick={openCreateTask}>
-              Add task
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div>
-              <h3 className="mb-3 text-sm font-medium text-muted-foreground">
-                Task list
-              </h3>
-              {tasksLoading ? (
-                <p className="text-sm text-muted-foreground">Loading tasks…</p>
-              ) : !tasks?.length ? (
-                <p className="text-sm text-muted-foreground">No tasks yet.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {tasks.map((t) => (
-                    <li
-                      key={t.id}
-                      className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-card/50 px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{t.title}</span>
-                          <Badge variant={taskStatusBadgeVariant(t.status)}>
-                            {t.status.replace(/_/g, ' ')}
-                          </Badge>
-                        </div>
-                        {t.description ? (
-                          <p className="text-sm text-muted-foreground">{t.description}</p>
-                        ) : null}
-                        <p className="text-xs text-muted-foreground">
-                          {t.startDate || t.endDate ? (
-                            <>
-                              {t.startDate
-                                ? `Start ${new Date(t.startDate).toLocaleDateString()}`
-                                : null}
-                              {t.startDate && t.endDate ? ' · ' : null}
-                              {t.endDate
-                                ? `End ${new Date(t.endDate).toLocaleDateString()}`
-                                : null}
-                              {' · '}
-                            </>
-                          ) : null}
-                          Assignee: {t.assignee?.email ?? '—'} · Created{' '}
-                          {new Date(t.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openEditTask(t)}
-                      >
-                        Edit
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
