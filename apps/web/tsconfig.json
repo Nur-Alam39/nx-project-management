@@ -45,5 +45,16 @@
     "eslint.config.js",
     "eslint.config.cjs",
     "eslint.config.mjs"
+  ],
+  "references": [
+    {
+      "path": "../../libs/ui-tokens"
+    },
+    {
+      "path": "../../libs/ui-components"
+    },
+    {
+      "path": "../../libs/projects"
+    }
   ]
 }

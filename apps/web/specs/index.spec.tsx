@@ -1,10 +1,14 @@
 import React from 'react';
 import { render } from '@testing-library/react';
-import Page from '../src/app/page';
+import { Providers } from '../src/app/providers';
 
-describe('Page', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<Page />);
-    expect(baseElement).toBeTruthy();
+describe('Providers', () => {
+  it('should render children', () => {
+    const { getByText } = render(
+      <Providers>
+        <span>ok</span>
+      </Providers>
+    );
+    expect(getByText('ok')).toBeTruthy();
   });
 });
