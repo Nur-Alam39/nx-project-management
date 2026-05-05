@@ -5,6 +5,24 @@
   "references": [
     {
       "path": "./apps/web"
+    },
+    {
+      "path": "./apps/api"
+    },
+    {
+      "path": "./libs/ui-tokens"
+    },
+    {
+      "path": "./libs/ui-components"
+    },
+    {
+      "path": "./libs/shared-features"
+    },
+    {
+      "path": "./libs/auth"
+    },
+    {
+      "path": "./libs/projects"
     }
   ]
 }

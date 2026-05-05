@@ -24,6 +24,11 @@ node_modules
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# Env (secrets; keep templates as .env.example)
+.env
+**/.env
+!**/.env.example
+
 # misc
 /.sass-cache
 /connect.lock
@@ -48,3 +53,6 @@ Thumbs.db
 out
 
 test-output
+
+# SQLite (local dev)
+*.db
