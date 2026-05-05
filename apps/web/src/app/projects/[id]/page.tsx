@@ -239,7 +239,7 @@ export default function ProjectDetailPage() {
 
   if (mePending || user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex h-full min-h-[100dvh] items-center justify-center text-muted-foreground">
         Loading…
       </div>
     );
@@ -248,7 +248,7 @@ export default function ProjectDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex h-full min-h-[100dvh] items-center justify-center text-muted-foreground">
         Loading project…
       </div>
     );
@@ -291,9 +291,9 @@ export default function ProjectDetailPage() {
     'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <header className="z-40 shrink-0 border-b border-border bg-card">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <Link
             href="/projects"
             className="text-sm text-muted-foreground hover:text-foreground"
@@ -304,7 +304,7 @@ export default function ProjectDetailPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 overflow-y-auto px-4 py-8">
         <Card>
           <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
             <div className="space-y-1">

@@ -79,7 +79,7 @@ export default function ProjectsPage() {
 
   if (mePending || user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex h-full min-h-[100dvh] items-center justify-center text-muted-foreground">
         Loading…
       </div>
     );
@@ -88,9 +88,9 @@ export default function ProjectsPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <header className="z-40 shrink-0 border-b border-border bg-card">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
           <div>
             <h1 className="text-lg font-semibold">Projects</h1>
             <p className="text-sm text-muted-foreground">{user.email}</p>
@@ -106,7 +106,7 @@ export default function ProjectsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+      <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 space-y-8 overflow-y-auto px-4 py-8">
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
