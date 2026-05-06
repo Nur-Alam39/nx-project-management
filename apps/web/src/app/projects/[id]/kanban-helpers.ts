@@ -65,11 +65,12 @@ export function findColumnForItemId(
   columns: Record<TaskStatus, string[]>
 ): TaskStatus | null {
   const sid = String(id);
-  if ((COLUMN_STATUSES as readonly string[]).includes(sid)) {
-    return sid as TaskStatus;
-  }
+  // Resolve tasks before column ids so a task id never collides with a status key (e.g. "done").
   for (const status of COLUMN_STATUSES) {
     if (columns[status].includes(sid)) return status;
+  }
+  if ((COLUMN_STATUSES as readonly string[]).includes(sid)) {
+    return sid as TaskStatus;
   }
   return null;
 }

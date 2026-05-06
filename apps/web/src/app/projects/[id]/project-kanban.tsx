@@ -5,12 +5,14 @@ import {
   closestCorners,
   DndContext,
   DragOverlay,
+  type CollisionDetection,
   type DragCancelEvent,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -26,6 +28,12 @@ import {
   moveTaskBetweenColumns,
   tasksIdStatusSignature,
 } from './kanban-helpers';
+
+/** Prefer pointer hit-testing so empty columns and sparse targets register reliably; fall back for keyboard/exotic layouts. */
+const kanbanCollisionDetection: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  return pointerHits.length > 0 ? pointerHits : closestCorners(args);
+};
 
 export function ProjectKanban({
   filteredTasks,
@@ -214,7 +222,7 @@ export function ProjectKanban({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={kanbanCollisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
