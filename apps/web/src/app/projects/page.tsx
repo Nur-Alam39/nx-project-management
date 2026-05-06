@@ -85,7 +85,13 @@ export default function ProjectsPage() {
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex h-full min-h-[100dvh] items-center justify-center px-4 text-center text-muted-foreground">
+        Redirecting to sign in…
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">

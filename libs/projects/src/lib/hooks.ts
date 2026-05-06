@@ -234,7 +234,26 @@ export function useUpdateTask() {
         assigneeId: string | null;
       }>;
     }) => updateTask(projectId, taskId, patch),
-    onSuccess: (_data: Task, variables) => {
+    onMutate: async (variables) => {
+      const queryKey = qk.tasks(variables.projectId);
+      await qc.cancelQueries({ queryKey });
+      const previousTasks = qc.getQueryData<Task[]>(queryKey);
+
+      qc.setQueryData<Task[]>(queryKey, (current) => {
+        if (!current) return current;
+        return current.map((task) =>
+          task.id === variables.taskId ? { ...task, ...variables.patch } : task
+        );
+      });
+
+      return { previousTasks, queryKey };
+    },
+    onError: (_error, _variables, context) => {
+      if (context) {
+        qc.setQueryData(context.queryKey, context.previousTasks);
+      }
+    },
+    onSettled: (_data, _error, variables) => {
       void qc.invalidateQueries({ queryKey: qk.tasks(variables.projectId) });
     },
   });

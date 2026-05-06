@@ -4,11 +4,14 @@
     "outDir": "dist",
     "module": "nodenext",
     "types": ["node"],
-    "rootDir": "src",
     "moduleResolution": "nodenext",
-    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
+    "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "@nx-projects/auth": ["../../libs/auth/src/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "../../libs/auth/src/**/*.ts"],
   "exclude": ["eslint.config.js", "eslint.config.cjs", "eslint.config.mjs"],
   "references": [
     {

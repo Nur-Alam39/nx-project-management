@@ -3,5 +3,8 @@ export * from './components/button/button';
 export * from './components/card/card';
 export * from './components/dialog/dialog';
 export * from './components/input/input';
+export * from './components/icon/icon';
 export * from './components/label/label';
+export * from './components/tabs/tabs';
+export * from 'react-icons/fa6';
 export * from './utils/cn';

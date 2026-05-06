@@ -17,11 +17,13 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@nx-projects/projects": ["../../libs/projects/src/index.ts"],
+      "@nx-projects/ui-components": ["../../libs/ui-components/src/index.ts"],
+      "@nx-projects/ui-tokens": ["../../libs/ui-tokens/src/index.ts"]
     },
     "types": ["jest", "node"],
     "outDir": "dist",
-    "rootDir": "src",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": [

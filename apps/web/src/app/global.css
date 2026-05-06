@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@import '@nx-projects/ui-tokens/theme.css';
+@import '../../../../libs/ui-tokens/src/theme.css';
 
 @source '../../../../**/*.{js,ts,jsx,tsx,mdx}';
 @source '../../../../libs/ui-components/src/**/*.{js,ts,jsx,tsx}';

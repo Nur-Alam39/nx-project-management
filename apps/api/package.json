@@ -3,7 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "nx": {
-    "tags": ["scope:api", "type:app"],
+    "tags": [
+      "scope:api",
+      "type:app"
+    ],
     "targets": {
       "build": {
         "executor": "@nx/esbuild:esbuild",
@@ -100,7 +103,7 @@
     }
   },
   "dependencies": {
-    "@nx-projects/auth": "0.0.1",
+    "@nx-projects/auth": "file:../../libs/auth",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
