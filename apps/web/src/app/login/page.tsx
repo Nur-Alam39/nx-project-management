@@ -11,6 +11,7 @@ import {
   Input,
   Label,
 } from '@nx-projects/ui-components';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { useLogin, useMe } from '@nx-projects/projects';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -34,7 +35,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>

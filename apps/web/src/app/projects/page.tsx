@@ -13,9 +13,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  FaPlus,
+  FaRightFromBracket,
+  Icon,
   Input,
   Label,
 } from '@nx-projects/ui-components';
+import { ThemeToggle } from '@/components/theme-toggle';
 import {
   useCreateProject,
   useLogout,
@@ -102,10 +106,13 @@ export default function ProjectsPage() {
             <p className="text-sm text-muted-foreground">{user.email}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <ThemeToggle />
             <Button type="button" onClick={() => setCreateOpen(true)}>
+              <Icon icon={FaPlus} size={16} />
               New project
             </Button>
             <Button variant="outline" type="button" onClick={() => void onLogout()}>
+              <Icon icon={FaRightFromBracket} size={16} />
               Sign out
             </Button>
           </div>

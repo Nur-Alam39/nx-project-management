@@ -14,6 +14,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  FaArrowLeft,
+  FaPenToSquare,
+  FaPlus,
+  Icon,
   Input,
   Label,
   Tabs,
@@ -21,6 +25,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '@nx-projects/ui-components';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { ProjectKanban } from './project-kanban';
 import {
   useAddProjectMember,
@@ -326,13 +331,20 @@ export default function ProjectDetailPage() {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <header className="z-40 shrink-0 border-b border-border bg-card">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
-          <div className="flex items-center">
-            <Link href="/projects" className="text-md font-medium text-muted-foreground hover:text-foreground flex align-middle d-block">
-              &#11013;
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              href="/projects"
+              className="inline-flex shrink-0 items-center text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Back to projects"
+            >
+              <Icon icon={FaArrowLeft} size={18} />
             </Link>
-            <span className="ml-2 font-medium text-xl">{project.name}</span>
+            <span className="truncate font-medium text-xl">{project.name}</span>
           </div>
-          <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
+          </div>
         </div>
       </header>
 
@@ -359,6 +371,7 @@ export default function ProjectDetailPage() {
                     </div>
                     {isOwner ? (
                       <Button type="button" variant="outline" onClick={() => setProjectEditOpen(true)}>
+                        <Icon icon={FaPenToSquare} size={16} />
                         Edit project
                       </Button>
                     ) : null}
@@ -497,6 +510,7 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
               <Button type="button" size="sm" onClick={openCreateTask}>
+                <Icon icon={FaPlus} size={14} />
                 Add task
               </Button>
             </div>
