@@ -1,101 +1,101 @@
 import type { UniqueIdentifier } from '@dnd-kit/core';
-import type { Task, TaskStatus } from '@nx-projects/projects';
-
-export const COLUMN_STATUSES: TaskStatus[] = [
-  'todo',
-  'in_progress',
-  'review',
-  'done',
-  'cancelled',
-];
+import type { Task, WorkflowStatus } from '@nx-projects/projects';
 
 export function taskStatusBadgeVariant(
-  status: TaskStatus
+  status: WorkflowStatus | null | undefined
 ): 'success' | 'planning' | 'completed' | 'archived' | 'secondary' | 'default' {
-  switch (status) {
-    case 'done':
-      return 'completed';
-    case 'in_progress':
-      return 'success';
-    case 'review':
-      return 'planning';
-    case 'cancelled':
-      return 'archived';
-    default:
-      return 'secondary';
-  }
+  if (!status) return 'secondary';
+  if (status.isArchived) return 'archived';
+  if (status.isCompleted) return 'completed';
+  if (status.key.includes('progress') || status.key.includes('doing')) return 'success';
+  if (status.key.includes('review') || status.key.includes('qa')) return 'planning';
+  return 'secondary';
 }
 
-export function formatStatusLabel(status: TaskStatus): string {
-  return status.replace(/_/g, ' ');
+export function formatStatusLabel(status: WorkflowStatus): string {
+  return status.name;
+}
+
+export function activeStatuses(statuses: WorkflowStatus[]): WorkflowStatus[] {
+  return statuses.filter((s) => !s.isArchived).sort((a, b) => a.order - b.order);
+}
+
+function getColumnIds(statuses: WorkflowStatus[]): string[] {
+  return activeStatuses(statuses).map((s) => s.id);
 }
 
 /** Ordered task ids per column; iteration order of `tasks` defines order within each status. */
-export function buildColumnTaskIds(tasks: Task[]): Record<TaskStatus, string[]> {
-  const next = COLUMN_STATUSES.reduce(
-    (acc, s) => ({ ...acc, [s]: [] as string[] }),
-    {} as Record<TaskStatus, string[]>
+export function buildColumnTaskIds(
+  tasks: Task[],
+  statuses: WorkflowStatus[]
+): Record<string, string[]> {
+  const next = Object.fromEntries(
+    getColumnIds(statuses).map((statusId) => [statusId, [] as string[]])
   );
   for (const t of tasks) {
-    next[t.status].push(t.id);
+    if (t.statusId && next[t.statusId]) {
+      next[t.statusId].push(t.id);
+    }
   }
   return next;
 }
 
 export function cloneColumnTaskIds(
-  cols: Record<TaskStatus, string[]>
-): Record<TaskStatus, string[]> {
-  const next = {} as Record<TaskStatus, string[]>;
-  for (const s of COLUMN_STATUSES) {
-    next[s] = [...cols[s]];
-  }
+  cols: Record<string, string[]>,
+  statuses: WorkflowStatus[]
+): Record<string, string[]> {
+  const next = Object.fromEntries(
+    getColumnIds(statuses).map((statusId) => [statusId, [...(cols[statusId] ?? [])]])
+  );
   return next;
 }
 
 /** Stable signature for id + status; ignores reorder within the same status column. */
 export function tasksIdStatusSignature(tasks: Task[]): string {
   return [...tasks]
-    .map((t) => `${t.id}\0${t.status}`)
+    .map((t) => `${t.id}\0${t.statusId ?? ''}`)
     .sort()
     .join('\n');
 }
 
 export function findColumnForItemId(
   id: UniqueIdentifier,
-  columns: Record<TaskStatus, string[]>
-): TaskStatus | null {
+  columns: Record<string, string[]>,
+  statuses: WorkflowStatus[]
+): string | null {
   const sid = String(id);
-  // Resolve tasks before column ids so a task id never collides with a status key (e.g. "done").
-  for (const status of COLUMN_STATUSES) {
-    if (columns[status].includes(sid)) return status;
+  const columnIds = getColumnIds(statuses);
+  for (const statusId of columnIds) {
+    if ((columns[statusId] ?? []).includes(sid)) return statusId;
   }
-  if ((COLUMN_STATUSES as readonly string[]).includes(sid)) {
-    return sid as TaskStatus;
+  if (columnIds.includes(sid)) {
+    return sid;
   }
   return null;
 }
 
 /** Cross-column move for multi-container sortable boards (see dnd-kit multiple sortable lists). */
 export function moveTaskBetweenColumns(
-  columns: Record<TaskStatus, string[]>,
+  columns: Record<string, string[]>,
   activeId: UniqueIdentifier,
-  overId: UniqueIdentifier
-): Record<TaskStatus, string[]> | null {
-  const activeContainer = findColumnForItemId(activeId, columns);
-  const overContainer = findColumnForItemId(overId, columns);
+  overId: UniqueIdentifier,
+  statuses: WorkflowStatus[]
+): Record<string, string[]> | null {
+  const activeContainer = findColumnForItemId(activeId, columns, statuses);
+  const overContainer = findColumnForItemId(overId, columns, statuses);
   if (!activeContainer || !overContainer || activeContainer === overContainer) {
     return null;
   }
 
   const aid = String(activeId);
-  const activeItems = [...columns[activeContainer]];
-  const overItems = [...columns[overContainer]];
+  const activeItems = [...(columns[activeContainer] ?? [])];
+  const overItems = [...(columns[overContainer] ?? [])];
   const activeIndex = activeItems.indexOf(aid);
   if (activeIndex === -1) return null;
 
   activeItems.splice(activeIndex, 1);
 
-  const overIsColumn = (COLUMN_STATUSES as readonly string[]).includes(String(overId));
+  const overIsColumn = getColumnIds(statuses).includes(String(overId));
   const insertIndex = overIsColumn
     ? overItems.length
     : (() => {
@@ -110,4 +110,17 @@ export function moveTaskBetweenColumns(
     [activeContainer]: activeItems,
     [overContainer]: overItems,
   };
+}
+
+export function countTasksByStatusId(tasks: Task[], statuses: WorkflowStatus[]) {
+  const next = Object.fromEntries(statuses.map((s) => [s.id, 0])) as Record<
+    string,
+    number
+  >;
+  for (const t of tasks) {
+    if (t.statusId && next[t.statusId] !== undefined) {
+      next[t.statusId] += 1;
+    }
+  }
+  return next;
 }

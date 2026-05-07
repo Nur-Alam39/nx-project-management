@@ -5,7 +5,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import type { Task, TaskStatus } from '@nx-projects/projects';
+import type { Task, WorkflowStatus } from '@nx-projects/projects';
 import { formatStatusLabel } from './kanban-helpers';
 import { KanbanTaskCard } from './kanban-task-card';
 
@@ -15,13 +15,13 @@ export function KanbanColumn({
   tasksById,
   onEditTask,
 }: {
-  status: TaskStatus;
+  status: WorkflowStatus;
   taskIds: string[];
   tasksById: Map<string, Task>;
   onEditTask: (task: Task) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: status,
+    id: status.id,
     data: { type: 'column', status },
   });
 
@@ -30,9 +30,16 @@ export function KanbanColumn({
     .filter((t): t is Task => t !== undefined);
 
   return (
-    <div className="flex min-h-0 w-[min(100%,280px)] shrink-0 flex-col lg:w-auto lg:min-w-0 lg:flex-1">
+    <div className="flex min-h-0 w-[320px] shrink-0 flex-col">
       <div className="mb-2 shrink-0 px-0.5 flex justify-between align-middle">
-        <h3 className="text-sm font-semibold capitalize">{formatStatusLabel(status)}</h3>
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full border border-border"
+            style={{ backgroundColor: status.color ?? '#94a3b8' }}
+            aria-hidden="true"
+          />
+          {formatStatusLabel(status)}
+        </h3>
         <p className="text-xs text-muted-foreground">
           {taskIds.length} task{taskIds.length === 1 ? '' : 's'}
         </p>

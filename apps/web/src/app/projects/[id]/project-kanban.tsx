@@ -17,13 +17,13 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import type { Task, TaskStatus } from '@nx-projects/projects';
+import type { Task, WorkflowStatus } from '@nx-projects/projects';
 import { KanbanCardFace } from './kanban-card-face';
 import { KanbanColumn } from './kanban-column';
 import {
+  activeStatuses,
   buildColumnTaskIds,
   cloneColumnTaskIds,
-  COLUMN_STATUSES,
   findColumnForItemId,
   moveTaskBetweenColumns,
   tasksIdStatusSignature,
@@ -36,18 +36,24 @@ const kanbanCollisionDetection: CollisionDetection = (args) => {
 };
 
 export function ProjectKanban({
+  workflowStatuses,
   filteredTasks,
   tasksLoading,
   totalTaskCount,
   onEditTask,
   onMoveTask,
 }: {
+  workflowStatuses: WorkflowStatus[];
   filteredTasks: Task[];
   tasksLoading: boolean;
   totalTaskCount: number;
   onEditTask: (t: Task) => void;
-  onMoveTask: (taskId: string, status: TaskStatus) => void | Promise<void>;
+  onMoveTask: (taskId: string, statusId: string) => void | Promise<void>;
 }) {
+  const orderedStatuses = useMemo(
+    () => activeStatuses(workflowStatuses),
+    [workflowStatuses]
+  );
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
@@ -57,16 +63,24 @@ export function ProjectKanban({
 
   const [overlayTask, setOverlayTask] = useState<Task | null>(null);
   const [optimisticStatuses, setOptimisticStatuses] = useState<
-    Record<string, TaskStatus>
+    Record<string, string>
   >({});
 
   const displayTasks = useMemo(
     () =>
       filteredTasks.map((task) => {
-        const optimisticStatus = optimisticStatuses[task.id];
-        return optimisticStatus ? { ...task, status: optimisticStatus } : task;
+        const optimisticStatusId = optimisticStatuses[task.id];
+        if (!optimisticStatusId) return task;
+        const status = orderedStatuses.find((s) => s.id === optimisticStatusId) ?? null;
+        return {
+          ...task,
+          statusId: optimisticStatusId,
+          status: status?.key ?? task.status,
+          workflowStatus: status ?? task.workflowStatus,
+          done: status?.isCompleted ?? task.done,
+        };
       }),
-    [filteredTasks, optimisticStatuses]
+    [filteredTasks, optimisticStatuses, orderedStatuses]
   );
 
   /** Server task identity only — optimistic drag status must not trigger a reset mid-drag. */
@@ -75,33 +89,33 @@ export function ProjectKanban({
     [filteredTasks]
   );
 
-  const [columnTaskIds, setColumnTaskIds] = useState<Record<TaskStatus, string[]>>(() =>
-    buildColumnTaskIds([])
+  const [columnTaskIds, setColumnTaskIds] = useState<Record<string, string[]>>(() =>
+    buildColumnTaskIds([], orderedStatuses)
   );
 
   const columnTaskIdsRef = useRef(columnTaskIds);
   columnTaskIdsRef.current = columnTaskIds;
 
   const dragSnapshotRef = useRef<{
-    columns: Record<TaskStatus, string[]>;
-    optimisticStatuses: Record<string, TaskStatus>;
+    columns: Record<string, string[]>;
+    optimisticStatuses: Record<string, string>;
   } | null>(null);
-  const dragOriginStatusRef = useRef<TaskStatus | null>(null);
+  const dragOriginStatusRef = useRef<string | null>(null);
   const optimisticStatusesRef = useRef(optimisticStatuses);
   optimisticStatusesRef.current = optimisticStatuses;
 
   useEffect(() => {
-    setColumnTaskIds(buildColumnTaskIds(displayTasks));
+    setColumnTaskIds(buildColumnTaskIds(displayTasks, orderedStatuses));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: sync when server/filtered set changes, not when optimistic overlay alone changes
-  }, [reconcileKey]);
+  }, [reconcileKey, orderedStatuses]);
 
   useEffect(() => {
     setOptimisticStatuses((prev) => {
       let changed = false;
-      const next: Record<string, TaskStatus> = { ...prev };
+      const next: Record<string, string> = { ...prev };
       for (const [taskId, status] of Object.entries(prev)) {
         const task = filteredTasks.find((t) => t.id === taskId);
-        if (!task || task.status === status) {
+        if (!task || task.statusId === status) {
           delete next[taskId];
           changed = true;
         }
@@ -124,7 +138,7 @@ export function ProjectKanban({
     setOverlayTask(task ?? null);
     dragOriginStatusRef.current = task?.status ?? null;
     dragSnapshotRef.current = {
-      columns: cloneColumnTaskIds(columnTaskIdsRef.current),
+      columns: cloneColumnTaskIds(columnTaskIdsRef.current, orderedStatuses),
       optimisticStatuses: { ...optimisticStatusesRef.current },
     };
   }
@@ -134,11 +148,11 @@ export function ProjectKanban({
     if (!over || active.id === over.id) return;
 
     const prev = columnTaskIdsRef.current;
-    const next = moveTaskBetweenColumns(prev, active.id, over.id);
+    const next = moveTaskBetweenColumns(prev, active.id, over.id, orderedStatuses);
     if (!next) return;
 
-    const beforeCol = findColumnForItemId(active.id, prev);
-    const afterCol = findColumnForItemId(active.id, next);
+    const beforeCol = findColumnForItemId(active.id, prev, orderedStatuses);
+    const afterCol = findColumnForItemId(active.id, next, orderedStatuses);
     columnTaskIdsRef.current = next;
     setColumnTaskIds(next);
 
@@ -164,8 +178,8 @@ export function ProjectKanban({
     }
 
     const prev = columnTaskIdsRef.current;
-    const activeContainer = findColumnForItemId(active.id, prev);
-    const overContainer = findColumnForItemId(over.id, prev);
+    const activeContainer = findColumnForItemId(active.id, prev, orderedStatuses);
+    const overContainer = findColumnForItemId(over.id, prev, orderedStatuses);
 
     if (
       activeContainer &&
@@ -184,7 +198,11 @@ export function ProjectKanban({
       }
     }
 
-    const finalCol = findColumnForItemId(active.id, columnTaskIdsRef.current);
+    const finalCol = findColumnForItemId(
+      active.id,
+      columnTaskIdsRef.current,
+      orderedStatuses
+    );
     const originStatus = dragOriginStatusRef.current;
     dragOriginStatusRef.current = null;
 
@@ -228,12 +246,12 @@ export function ProjectKanban({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1 lg:grid lg:grid-cols-5 lg:gap-3 lg:overflow-hidden lg:pb-0">
-        {COLUMN_STATUSES.map((status) => (
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden pb-2">
+        {orderedStatuses.map((status) => (
           <KanbanColumn
-            key={status}
+            key={status.id}
             status={status}
-            taskIds={columnTaskIds[status] ?? []}
+            taskIds={columnTaskIds[status.id] ?? []}
             tasksById={tasksById}
             onEditTask={onEditTask}
           />

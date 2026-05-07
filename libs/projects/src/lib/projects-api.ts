@@ -4,7 +4,7 @@ import type {
   ProjectMembersResponse,
   ProjectStatus,
   Task,
-  TaskStatus,
+  WorkflowStatus,
 } from './types';
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -83,7 +83,8 @@ export async function createTask(
   input: {
     title: string;
     description?: string | null;
-    status?: TaskStatus;
+    status?: string;
+    statusId?: string;
     startDate?: string | null;
     endDate?: string | null;
     assigneeId?: string | null;
@@ -103,7 +104,8 @@ export async function updateTask(
     title: string;
     description: string | null;
     done: boolean;
-    status: TaskStatus;
+    status: string;
+    statusId: string;
     startDate: string | null;
     endDate: string | null;
     assigneeId: string | null;
@@ -114,4 +116,69 @@ export async function updateTask(
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow<Task>(res);
+}
+
+export async function fetchWorkflowStatuses(
+  projectId: string,
+  includeArchived = true
+): Promise<WorkflowStatus[]> {
+  const res = await apiFetch(
+    `/projects/${projectId}/workflow-statuses?includeArchived=${includeArchived}`
+  );
+  return parseJsonOrThrow<WorkflowStatus[]>(res);
+}
+
+export async function createWorkflowStatus(
+  projectId: string,
+  input: {
+    name: string;
+    key?: string;
+    color?: string | null;
+    isCompleted?: boolean;
+  }
+): Promise<WorkflowStatus> {
+  const res = await apiFetch(`/projects/${projectId}/workflow-statuses`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow<WorkflowStatus>(res);
+}
+
+export async function updateWorkflowStatus(
+  projectId: string,
+  statusId: string,
+  input: Partial<{
+    name: string;
+    key: string;
+    color: string | null;
+    isCompleted: boolean;
+    isArchived: boolean;
+  }>
+): Promise<WorkflowStatus> {
+  const res = await apiFetch(`/projects/${projectId}/workflow-statuses/${statusId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow<WorkflowStatus>(res);
+}
+
+export async function reorderWorkflowStatuses(
+  projectId: string,
+  statusIds: string[]
+): Promise<WorkflowStatus[]> {
+  const res = await apiFetch(`/projects/${projectId}/workflow-statuses/reorder`, {
+    method: 'PATCH',
+    body: JSON.stringify({ statusIds }),
+  });
+  return parseJsonOrThrow<WorkflowStatus[]>(res);
+}
+
+export async function archiveWorkflowStatus(
+  projectId: string,
+  statusId: string
+): Promise<void> {
+  const res = await apiFetch(`/projects/${projectId}/workflow-statuses/${statusId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await parseJsonOrThrow(res);
 }

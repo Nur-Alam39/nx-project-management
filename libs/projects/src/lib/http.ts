@@ -29,12 +29,33 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 
 export async function parseJsonOrThrow<T>(res: Response): Promise<T> {
   const text = await res.text();
-  const json = text ? (JSON.parse(text) as unknown) : undefined;
+  const trimmedText = text.trim();
+  let json: unknown;
+  if (trimmedText) {
+    try {
+      json = JSON.parse(trimmedText) as unknown;
+    } catch {
+      if (!res.ok) {
+        throw new ApiError(
+          res.status,
+          trimmedText || res.statusText || `Request failed with status ${res.status}`
+        );
+      }
+      throw new Error(`Expected JSON response but received: ${trimmedText.slice(0, 200)}`);
+    }
+  }
   if (!res.ok) {
-    const body = json as ApiErrorBody | undefined;
+    const body =
+      json &&
+      typeof json === 'object' &&
+      'message' in json &&
+      typeof (json as { message?: unknown }).message === 'string'
+        ? (json as ApiErrorBody)
+        : undefined;
+    const fallbackMessage = trimmedText || res.statusText || `Request failed with status ${res.status}`;
     throw new ApiError(
       res.status,
-      body?.message ?? res.statusText,
+      body?.message ?? fallbackMessage,
       body
     );
   }

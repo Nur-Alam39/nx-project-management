@@ -1,6 +1,23 @@
 'use client';
 
 import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Badge,
   Button,
   Card,
@@ -15,8 +32,13 @@ import {
   DialogHeader,
   DialogTitle,
   FaArrowLeft,
+  FaBoxArchive,
+  FaCheck,
+  FaCircleCheck,
+  FaGripVertical,
   FaPenToSquare,
   FaPlus,
+  FaXmark,
   Icon,
   Input,
   Label,
@@ -27,24 +49,31 @@ import {
 } from '@nx-projects/ui-components';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { ProjectKanban } from './project-kanban';
+import { activeStatuses, countTasksByStatusId } from './kanban-helpers';
 import {
   useAddProjectMember,
+  useArchiveWorkflowStatus,
+  useCreateWorkflowStatus,
   useCreateTask,
   useDeleteProject,
   useMe,
   useProject,
   useProjectMembers,
+  useReorderWorkflowStatuses,
   useRemoveProjectMember,
   useTasks,
   useUpdateProject,
   useUpdateTask,
+  useUpdateWorkflowStatus,
+  useWorkflowStatuses,
   type ProjectStatus,
   type Task,
-  type TaskStatus,
+  type WorkflowStatus,
 } from '@nx-projects/projects';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 /** Select value for “filter to tasks with no assignee” */
 const TASK_FILTER_UNASSIGNED = '__unassigned__';
@@ -54,14 +83,6 @@ const STATUSES: ProjectStatus[] = [
   'active',
   'completed',
   'archived',
-];
-
-const TASK_STATUSES: TaskStatus[] = [
-  'todo',
-  'in_progress',
-  'review',
-  'done',
-  'cancelled',
 ];
 
 function isoDateToInput(iso: string | null): string {
@@ -88,6 +109,164 @@ function statusVariant(
   }
 }
 
+function WorkflowStatusRow({
+  statusRow,
+  isOwner,
+  isRenaming,
+  editingStatusName,
+  editingStatusColor,
+  setEditingStatusName,
+  setEditingStatusColor,
+  onStartRename,
+  onCancelRename,
+  onSaveRename,
+  onSetCompletedStatus,
+  onArchiveStatus,
+  pending,
+  disableArchive,
+}: {
+  statusRow: WorkflowStatus;
+  isOwner: boolean;
+  isRenaming: boolean;
+  editingStatusName: string;
+  editingStatusColor: string;
+  setEditingStatusName: (value: string) => void;
+  setEditingStatusColor: (value: string) => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onSaveRename: () => void;
+  onSetCompletedStatus: () => void;
+  onArchiveStatus: () => void;
+  pending: boolean;
+  disableArchive: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: statusRow.id,
+    disabled: !isOwner || isRenaming,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 rounded border border-border bg-card p-2 ${
+        isDragging ? 'opacity-60 shadow-sm' : ''
+      }`}
+    >
+      {isOwner ? (
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={`Reorder ${statusRow.name}`}
+          title="Drag to reorder"
+          disabled={isRenaming}
+          {...attributes}
+          {...listeners}
+        >
+          <Icon icon={FaGripVertical} size={14} />
+        </button>
+      ) : null}
+      {isRenaming ? (
+        <div className="flex min-w-[10rem] flex-1 items-center gap-2">
+          <Input
+            value={editingStatusName}
+            onChange={(ev) => setEditingStatusName(ev.target.value)}
+            className="h-8 min-w-[10rem] flex-1"
+            autoFocus
+          />
+          <Input
+            type="color"
+            value={editingStatusColor}
+            onChange={(ev) => setEditingStatusColor(ev.target.value)}
+            className="h-8 w-10 p-1"
+            aria-label={`Color for ${statusRow.name}`}
+            title="Pick status color"
+          />
+        </div>
+      ) : (
+        <span className="flex min-w-[10rem] flex-1 items-center gap-2 text-sm">
+          <span
+            className="inline-block h-3 w-3 rounded-full border border-border"
+            style={{ backgroundColor: statusRow.color ?? '#94a3b8' }}
+            aria-hidden="true"
+          />
+          {statusRow.name}
+        </span>
+      )}
+      {statusRow.isCompleted ? <Badge variant="completed">Completed</Badge> : null}
+      {isOwner ? (
+        <div className="ml-auto flex items-center gap-1">
+          {isRenaming ? (
+            <>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={onSaveRename}
+                disabled={pending}
+                aria-label={`Save name for ${statusRow.name}`}
+                title="Save rename"
+              >
+                <Icon icon={FaCheck} size={14} />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                onClick={onCancelRename}
+                aria-label={`Cancel rename for ${statusRow.name}`}
+                title="Cancel rename"
+              >
+                <Icon icon={FaXmark} size={14} />
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={onStartRename}
+              aria-label={`Rename ${statusRow.name}`}
+              title="Rename status"
+            >
+              <Icon icon={FaPenToSquare} size={14} />
+            </Button>
+          )}
+          {!statusRow.isCompleted ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              onClick={onSetCompletedStatus}
+              disabled={pending}
+              aria-label={`Set ${statusRow.name} as completed`}
+              title="Set as completed status"
+            >
+              <Icon icon={FaCircleCheck} size={14} />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={onArchiveStatus}
+            disabled={disableArchive || pending}
+            aria-label={`Archive ${statusRow.name}`}
+            title="Archive status"
+          >
+            <Icon icon={FaBoxArchive} size={14} />
+          </Button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const id = typeof params['id'] === 'string' ? params['id'] : undefined;
@@ -98,9 +277,15 @@ export default function ProjectDetailPage() {
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const { data: tasks, isLoading: tasksLoading } = useTasks(id);
+  const { data: workflowStatuses = [], isLoading: workflowLoading } =
+    useWorkflowStatuses(id);
   const { data: membersData, isLoading: membersLoading } = useProjectMembers(id);
   const addMember = useAddProjectMember();
   const removeMember = useRemoveProjectMember();
+  const createWorkflowStatus = useCreateWorkflowStatus();
+  const updateWorkflowStatus = useUpdateWorkflowStatus();
+  const reorderWorkflowStatuses = useReorderWorkflowStatuses();
+  const archiveWorkflowStatus = useArchiveWorkflowStatus();
   const router = useRouter();
 
   const [projectEditOpen, setProjectEditOpen] = useState(false);
@@ -114,10 +299,16 @@ export default function ProjectDetailPage() {
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
-  const [taskStatus, setTaskStatus] = useState<TaskStatus>('todo');
+  const [taskStatusId, setTaskStatusId] = useState('');
   const [taskStartDate, setTaskStartDate] = useState('');
   const [taskEndDate, setTaskEndDate] = useState('');
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusColor, setNewStatusColor] = useState('#64748b');
+  const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
+  const [editingStatusName, setEditingStatusName] = useState('');
+  const [editingStatusColor, setEditingStatusColor] = useState('#64748b');
+  const [workflowOrder, setWorkflowOrder] = useState<string[]>([]);
 
   const [taskFilterAssignee, setTaskFilterAssignee] = useState<string>('');
 
@@ -145,29 +336,52 @@ export default function ProjectDetailPage() {
     });
   }, [tasks, taskFilterAssignee]);
 
-  const taskMetrics = useMemo(() => {
-    const empty: Record<TaskStatus, number> = {
-      todo: 0,
-      in_progress: 0,
-      review: 0,
-      done: 0,
-      cancelled: 0,
-    };
-    if (!tasks?.length) {
-      return { total: 0, byStatus: { ...empty } };
+  const orderedWorkflowStatuses = useMemo(
+    () => activeStatuses(workflowStatuses),
+    [workflowStatuses]
+  );
+  const workflowSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+  const workflowStatusById = useMemo(
+    () => new Map(orderedWorkflowStatuses.map((s) => [s.id, s])),
+    [orderedWorkflowStatuses]
+  );
+  const displayedWorkflowStatuses = useMemo(() => {
+    if (workflowOrder.length === 0) {
+      return orderedWorkflowStatuses;
     }
-    const byStatus = { ...empty };
-    for (const t of tasks) {
-      byStatus[t.status]++;
+    return workflowOrder
+      .map((statusId) => workflowStatusById.get(statusId))
+      .filter((status): status is WorkflowStatus => status !== undefined);
+  }, [workflowOrder, workflowStatusById, orderedWorkflowStatuses]);
+
+  useEffect(() => {
+    setWorkflowOrder(orderedWorkflowStatuses.map((s) => s.id));
+  }, [orderedWorkflowStatuses]);
+
+  useEffect(() => {
+    if (!taskStatusId && orderedWorkflowStatuses.length > 0) {
+      setTaskStatusId(orderedWorkflowStatuses[0].id);
+    }
+  }, [taskStatusId, orderedWorkflowStatuses]);
+
+  const taskMetrics = useMemo(() => {
+    const byStatus = countTasksByStatusId(tasks ?? [], orderedWorkflowStatuses);
+    if (!tasks?.length) {
+      return { total: 0, byStatus };
     }
     return { total: tasks.length, byStatus };
-  }, [tasks]);
+  }, [tasks, orderedWorkflowStatuses]);
 
   function openCreateTask() {
     setEditingTaskId(null);
     setTaskTitle('');
     setTaskDescription('');
-    setTaskStatus('todo');
+    setTaskStatusId(orderedWorkflowStatuses[0]?.id ?? '');
     setTaskStartDate('');
     setTaskEndDate('');
     setTaskAssigneeId('');
@@ -178,7 +392,7 @@ export default function ProjectDetailPage() {
     setEditingTaskId(t.id);
     setTaskTitle(t.title);
     setTaskDescription(t.description ?? '');
-    setTaskStatus(t.status);
+    setTaskStatusId(t.statusId ?? orderedWorkflowStatuses[0]?.id ?? '');
     setTaskStartDate(isoDateToInput(t.startDate));
     setTaskEndDate(isoDateToInput(t.endDate));
     setTaskAssigneeId(t.assigneeId ?? '');
@@ -211,6 +425,7 @@ export default function ProjectDetailPage() {
     if (!id) return;
     const title = taskTitle.trim();
     if (!title) return;
+    if (!taskStatusId) return;
     const startIso =
       taskStartDate.trim() === '' ? null : new Date(taskStartDate + 'T12:00:00').toISOString();
     const endIso =
@@ -224,7 +439,7 @@ export default function ProjectDetailPage() {
         patch: {
           title,
           description: taskDescription.trim() || null,
-          status: taskStatus,
+          statusId: taskStatusId,
           startDate: startIso,
           endDate: endIso,
           assigneeId: assignee,
@@ -235,7 +450,7 @@ export default function ProjectDetailPage() {
         projectId: id,
         title,
         description: taskDescription.trim() || null,
-        status: taskStatus,
+        statusId: taskStatusId,
         startDate: startIso,
         endDate: endIso,
         assigneeId: assignee,
@@ -245,7 +460,7 @@ export default function ProjectDetailPage() {
     setEditingTaskId(null);
     setTaskTitle('');
     setTaskDescription('');
-    setTaskStatus('todo');
+    setTaskStatusId(orderedWorkflowStatuses[0]?.id ?? '');
     setTaskStartDate('');
     setTaskEndDate('');
     setTaskAssigneeId('');
@@ -263,6 +478,69 @@ export default function ProjectDetailPage() {
   async function onRemoveMember(userId: string) {
     if (!id || !globalThis.confirm('Remove this team member?')) return;
     await removeMember.mutateAsync({ projectId: id, userId });
+  }
+
+  async function onCreateWorkflowStatus(e: FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    const name = newStatusName.trim();
+    if (!name) return;
+    await createWorkflowStatus.mutateAsync({
+      projectId: id,
+      payload: { name, color: newStatusColor },
+    });
+    setNewStatusName('');
+    setNewStatusColor('#64748b');
+  }
+
+  async function onSaveStatusRename(statusId: string) {
+    if (!id) return;
+    const next = editingStatusName.trim();
+    if (!next) return;
+    await updateWorkflowStatus.mutateAsync({
+      projectId: id,
+      statusId,
+      patch: { name: next, color: editingStatusColor },
+    });
+    setEditingStatusId(null);
+    setEditingStatusName('');
+    setEditingStatusColor('#64748b');
+  }
+
+  async function onSetCompletedStatus(statusId: string) {
+    if (!id) return;
+    await updateWorkflowStatus.mutateAsync({
+      projectId: id,
+      statusId,
+      patch: { isCompleted: true },
+    });
+  }
+
+  async function onArchiveStatus(status: WorkflowStatus) {
+    if (!id || !globalThis.confirm(`Archive "${status.name}"?`)) return;
+    await archiveWorkflowStatus.mutateAsync({ projectId: id, statusId: status.id });
+  }
+
+  function onWorkflowDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!id || !over || active.id === over.id) return;
+
+    const oldIndex = displayedWorkflowStatuses.findIndex((s) => s.id === active.id);
+    const newIndex = displayedWorkflowStatuses.findIndex((s) => s.id === over.id);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return;
+
+    const previousOrder = displayedWorkflowStatuses.map((s) => s.id);
+    const reordered = arrayMove(displayedWorkflowStatuses, oldIndex, newIndex);
+    const reorderedIds = reordered.map((s) => s.id);
+    setWorkflowOrder(reorderedIds);
+    void reorderWorkflowStatuses
+      .mutateAsync({
+        projectId: id,
+        statusIds: reorderedIds,
+      })
+      .catch(() => {
+        setWorkflowOrder(previousOrder);
+      });
   }
 
   if (mePending || user === undefined) {
@@ -353,6 +631,7 @@ export default function ProjectDetailPage() {
           <TabsList className="shrink-0 justify-start">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="workflow">Workflow</TabsTrigger>
           </TabsList>
 
           <TabsContent
@@ -404,18 +683,111 @@ export default function ProjectDetailPage() {
                     </CardHeader>
                   </Card>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 space-y-3">
-                  {TASK_STATUSES.map((s) => (
-                    <Card key={s} className="h-full">
-                      <CardHeader className="pb-2 pt-4">
-                        <CardDescription className="capitalize">{s.replace(/_/g, ' ')}</CardDescription>
-                        <CardTitle className="text-xl tabular-nums">{taskMetrics.byStatus[s]}</CardTitle>
-                      </CardHeader>
-                    </Card>
-                  ))}
-                </div>
+                <Card>
+                  <CardHeader className="pb-2 pt-4">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <CardDescription>Tasks by status</CardDescription>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {taskMetrics.total} total
+                      </span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex flex-col items-center gap-4 pb-4 sm:flex-row sm:items-center">
+                    <div className="relative h-40 w-40 shrink-0">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={
+                              taskMetrics.total > 0
+                                ? orderedWorkflowStatuses
+                                    .map((s) => ({
+                                      id: s.id,
+                                      name: s.name,
+                                      value: taskMetrics.byStatus[s.id] ?? 0,
+                                      color: s.color ?? '#94a3b8',
+                                    }))
+                                    .filter((d) => d.value > 0)
+                                : [{ id: '__empty__', name: 'No tasks', value: 1, color: 'var(--muted)' }]
+                            }
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius="65%"
+                            outerRadius="100%"
+                            paddingAngle={taskMetrics.total > 0 ? 2 : 0}
+                            stroke="none"
+                            isAnimationActive={false}
+                          >
+                            {(taskMetrics.total > 0
+                              ? orderedWorkflowStatuses
+                                  .map((s) => ({
+                                    id: s.id,
+                                    color: s.color ?? '#94a3b8',
+                                    value: taskMetrics.byStatus[s.id] ?? 0,
+                                  }))
+                                  .filter((d) => d.value > 0)
+                              : [{ id: '__empty__', color: 'hsl(var(--muted))' }]
+                            ).map((entry) => (
+                              <Cell key={entry.id} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          {taskMetrics.total > 0 ? (
+                            <Tooltip
+                              cursor={false}
+                              contentStyle={{
+                                background: 'hsl(var(--popover))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: 8,
+                                fontSize: 12,
+                                padding: '6px 10px',
+                              }}
+                              labelStyle={{ color: 'hsl(var(--foreground))' }}
+                              itemStyle={{ color: 'hsl(var(--foreground))' }}
+                              formatter={(value: number, name: string) => [
+                                `${value} (${((value / taskMetrics.total) * 100).toFixed(0)}%)`,
+                                name,
+                              ]}
+                            />
+                          ) : null}
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-semibold tabular-nums leading-none">
+                          {taskMetrics.total}
+                        </span>
+                        <span className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          tasks
+                        </span>
+                      </div>
+                    </div>
+                    <ul className="grid flex-1 grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-1 md:grid-cols-2">
+                      {orderedWorkflowStatuses.map((s) => {
+                        const count = taskMetrics.byStatus[s.id] ?? 0;
+                        const pct =
+                          taskMetrics.total > 0
+                            ? Math.round((count / taskMetrics.total) * 100)
+                            : 0;
+                        return (
+                          <li key={s.id} className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-border"
+                              style={{ backgroundColor: s.color ?? '#94a3b8' }}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate text-muted-foreground">{s.name}</span>
+                            <span className="ml-auto whitespace-nowrap font-medium tabular-nums">
+                              {count}
+                              <span className="ml-1 text-muted-foreground">
+                                · {pct}%
+                              </span>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </CardContent>
+                </Card>
               </div>
-              <div>
+              <div className="space-y-3">
                 <Card className="flex min-h-0 shrink-0 flex-col overflow-hidden">
                   <CardHeader className="shrink-0 flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
                     <div className="space-y-1">
@@ -518,20 +890,104 @@ export default function ProjectDetailPage() {
               <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-0 pb-4 pt-4">
                 <div className="flex min-h-0 flex-1 flex-col">
                   <ProjectKanban
+                    workflowStatuses={orderedWorkflowStatuses}
                     filteredTasks={filteredTasks}
                     tasksLoading={tasksLoading}
                     totalTaskCount={tasks?.length ?? 0}
                     onEditTask={openEditTask}
-                    onMoveTask={async (taskId, status) => {
+                    onMoveTask={async (taskId, statusId) => {
                       if (!id) return;
                       await updateTask.mutateAsync({
                         projectId: id,
                         taskId,
-                        patch: { status },
+                        patch: { statusId },
                       });
                     }}
                   />
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="workflow" className="mt-4 flex min-h-0 flex-1 flex-col">
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <CardHeader className="shrink-0 space-y-1">
+                <CardTitle>Workflow</CardTitle>
+                <CardDescription>
+                  Manage custom task columns. Drag rows to reorder them.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="min-h-0 space-y-3 overflow-y-auto overscroll-y-contain">
+                {workflowLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading workflow…</p>
+                ) : null}
+                {isOwner ? (
+                  <form onSubmit={(ev) => void onCreateWorkflowStatus(ev)} className="flex gap-2">
+                    <Input
+                      value={newStatusName}
+                      onChange={(ev) => setNewStatusName(ev.target.value)}
+                      placeholder="New status name"
+                    />
+                    <Input
+                      type="color"
+                      value={newStatusColor}
+                      onChange={(ev) => setNewStatusColor(ev.target.value)}
+                      className="h-9 w-12 p-1"
+                      aria-label="New status color"
+                      title="Pick status color"
+                    />
+                    <Button type="submit" disabled={createWorkflowStatus.isPending}>
+                      Add
+                    </Button>
+                  </form>
+                ) : null}
+                {displayedWorkflowStatuses.length === 0 && !workflowLoading ? (
+                  <p className="text-sm text-muted-foreground">No workflow statuses found.</p>
+                ) : (
+                  <DndContext
+                    sensors={workflowSensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={onWorkflowDragEnd}
+                  >
+                    <SortableContext
+                      items={displayedWorkflowStatuses.map((s) => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      <ul className="space-y-2">
+                        {displayedWorkflowStatuses.map((statusRow) => (
+                          <WorkflowStatusRow
+                            key={statusRow.id}
+                            statusRow={statusRow}
+                            isOwner={isOwner}
+                            isRenaming={editingStatusId === statusRow.id}
+                            editingStatusName={editingStatusName}
+                            editingStatusColor={editingStatusColor}
+                            setEditingStatusName={setEditingStatusName}
+                            setEditingStatusColor={setEditingStatusColor}
+                            onStartRename={() => {
+                              setEditingStatusId(statusRow.id);
+                              setEditingStatusName(statusRow.name);
+                              setEditingStatusColor(statusRow.color ?? '#64748b');
+                            }}
+                            onCancelRename={() => {
+                              setEditingStatusId(null);
+                              setEditingStatusName('');
+                              setEditingStatusColor('#64748b');
+                            }}
+                            onSaveRename={() => void onSaveStatusRename(statusRow.id)}
+                            onSetCompletedStatus={() => void onSetCompletedStatus(statusRow.id)}
+                            onArchiveStatus={() => void onArchiveStatus(statusRow)}
+                            pending={
+                              updateWorkflowStatus.isPending ||
+                              reorderWorkflowStatuses.isPending ||
+                              archiveWorkflowStatus.isPending
+                            }
+                            disableArchive={displayedWorkflowStatuses.length <= 1}
+                          />
+                        ))}
+                      </ul>
+                    </SortableContext>
+                  </DndContext>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -643,12 +1099,12 @@ export default function ProjectDetailPage() {
                 <select
                   id="task-status-input"
                   className={selectClass}
-                  value={taskStatus}
-                  onChange={(ev) => setTaskStatus(ev.target.value as TaskStatus)}
+                  value={taskStatusId}
+                  onChange={(ev) => setTaskStatusId(ev.target.value)}
                 >
-                  {TASK_STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
+                  {orderedWorkflowStatuses.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
                     </option>
                   ))}
                 </select>

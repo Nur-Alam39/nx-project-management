@@ -7,16 +7,21 @@ import {
 } from '@tanstack/react-query';
 import {
   addProjectMember,
+  archiveWorkflowStatus,
+  createWorkflowStatus,
   createProject,
   createTask,
   deleteProject,
+  fetchWorkflowStatuses,
   fetchProject,
   fetchProjectMembers,
   fetchProjects,
   fetchTasks,
+  reorderWorkflowStatuses,
   removeProjectMember,
   updateProject,
   updateTask,
+  updateWorkflowStatus,
 } from './projects-api';
 import {
   fetchMe,
@@ -29,8 +34,8 @@ import type {
   ProjectRole,
   ProjectStatus,
   Task,
-  TaskStatus,
   User,
+  WorkflowStatus,
 } from './types';
 import { qk } from './queries';
 
@@ -148,6 +153,16 @@ export function useProjectMembers(projectId: string | undefined) {
   });
 }
 
+export function useWorkflowStatuses(projectId: string | undefined) {
+  return useQuery({
+    queryKey: projectId
+      ? qk.workflowStatuses(projectId)
+      : ['projects', 'workflow-statuses', 'noop'],
+    queryFn: () => fetchWorkflowStatuses(projectId as string, true),
+    enabled: Boolean(projectId),
+  });
+}
+
 export function useAddProjectMember() {
   const qc = useQueryClient();
   return useMutation({
@@ -195,7 +210,8 @@ export function useCreateTask() {
       projectId: string;
       title: string;
       description?: string | null;
-      status?: TaskStatus;
+      status?: string;
+      statusId?: string;
       startDate?: string | null;
       endDate?: string | null;
       assigneeId?: string | null;
@@ -228,7 +244,8 @@ export function useUpdateTask() {
         title: string;
         description: string | null;
         done: boolean;
-        status: TaskStatus;
+        status: string;
+        statusId: string;
         startDate: string | null;
         endDate: string | null;
         assigneeId: string | null;
@@ -259,11 +276,98 @@ export function useUpdateTask() {
   });
 }
 
+export function useCreateWorkflowStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      payload,
+    }: {
+      projectId: string;
+      payload: {
+        name: string;
+        key?: string;
+        color?: string | null;
+        isCompleted?: boolean;
+      };
+    }) => createWorkflowStatus(projectId, payload),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: qk.workflowStatuses(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useUpdateWorkflowStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      statusId,
+      patch,
+    }: {
+      projectId: string;
+      statusId: string;
+      patch: Partial<{
+        name: string;
+        key: string;
+        color: string | null;
+        isCompleted: boolean;
+        isArchived: boolean;
+      }>;
+    }) => updateWorkflowStatus(projectId, statusId, patch),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: qk.workflowStatuses(variables.projectId),
+      });
+      void qc.invalidateQueries({ queryKey: qk.tasks(variables.projectId) });
+    },
+  });
+}
+
+export function useReorderWorkflowStatuses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      statusIds,
+    }: {
+      projectId: string;
+      statusIds: string[];
+    }) => reorderWorkflowStatuses(projectId, statusIds),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: qk.workflowStatuses(variables.projectId),
+      });
+    },
+  });
+}
+
+export function useArchiveWorkflowStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      statusId,
+    }: {
+      projectId: string;
+      statusId: string;
+    }) => archiveWorkflowStatus(projectId, statusId),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: qk.workflowStatuses(variables.projectId),
+      });
+      void qc.invalidateQueries({ queryKey: qk.tasks(variables.projectId) });
+    },
+  });
+}
+
 export type {
   Project,
   ProjectRole,
   ProjectStatus,
   Task,
-  TaskStatus,
   User,
+  WorkflowStatus,
 };

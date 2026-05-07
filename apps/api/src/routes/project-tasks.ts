@@ -4,7 +4,13 @@ import {
   canAssignUserToProject,
   findAccessibleProject,
 } from '../lib/project-access.js';
-import { normalizeTaskStatus, taskJson } from '../lib/task-utils.js';
+import { taskJson } from '../lib/task-utils.js';
+import {
+  ensureProjectWorkflow,
+  listProjectWorkflowStatuses,
+  pickDefaultWorkflowStatus,
+  resolveWorkflowStatusInput,
+} from '../lib/workflow-utils.js';
 import { authMiddleware, type AuthedRequest } from '../middleware/auth.js';
 
 export function createProjectTasksRouter(): Router {
@@ -19,10 +25,14 @@ export function createProjectTasksRouter(): Router {
       res.status(404).json({ message: 'Not found' });
       return;
     }
+    await ensureProjectWorkflow(access.project.id);
     const tasks = await prisma.task.findMany({
       where: { projectId: access.project.id },
       orderBy: { createdAt: 'desc' },
-      include: { assignee: { select: { id: true, email: true } } },
+      include: {
+        assignee: { select: { id: true, email: true } },
+        workflowStatus: true,
+      },
     });
     res.json(tasks.map((t) => taskJson(t)));
   });
@@ -36,6 +46,7 @@ export function createProjectTasksRouter(): Router {
       res.status(404).json({ message: 'Not found' });
       return;
     }
+    await ensureProjectWorkflow(access.project.id);
     const title = String(req.body?.title ?? '').trim();
     if (!title) {
       res.status(400).json({ message: 'Title is required' });
@@ -45,8 +56,15 @@ export function createProjectTasksRouter(): Router {
       req.body?.description === undefined || req.body?.description === null
         ? null
         : String(req.body.description);
-    const statusRaw = normalizeTaskStatus(req.body?.status);
-    const status = statusRaw ?? 'todo';
+    const status = await resolveWorkflowStatusInput({
+      projectId: access.project.id,
+      statusId: req.body?.statusId,
+      statusKey: req.body?.status,
+    });
+    if (!status) {
+      res.status(400).json({ message: 'Invalid status' });
+      return;
+    }
     let assigneeId: string | null =
       req.body?.assigneeId === undefined || req.body?.assigneeId === null
         ? null
@@ -86,19 +104,23 @@ export function createProjectTasksRouter(): Router {
         endDate = d;
       }
     }
-    const done = status === 'done';
+    const done = status.isCompleted;
     const task = await prisma.task.create({
       data: {
         title,
         description,
         projectId: access.project.id,
-        status,
+        status: status.key,
+        statusId: status.id,
         done,
         startDate,
         endDate,
         assigneeId,
       },
-      include: { assignee: { select: { id: true, email: true } } },
+      include: {
+        assignee: { select: { id: true, email: true } },
+        workflowStatus: true,
+      },
     });
     res.status(201).json(taskJson(task));
   });
@@ -115,8 +137,10 @@ export function createProjectTasksRouter(): Router {
         res.status(404).json({ message: 'Not found' });
         return;
       }
+      await ensureProjectWorkflow(access.project.id);
       const existing = await prisma.task.findFirst({
         where: { id: req.params['taskId'], projectId: access.project.id },
+        include: { workflowStatus: true },
       });
       if (!existing) {
         res.status(404).json({ message: 'Not found' });
@@ -127,6 +151,7 @@ export function createProjectTasksRouter(): Router {
         description?: string | null;
         done?: boolean;
         status?: string;
+        statusId?: string;
         startDate?: Date | null;
         endDate?: Date | null;
         assigneeId?: string | null;
@@ -144,8 +169,6 @@ export function createProjectTasksRouter(): Router {
           req.body.description === null ? null : String(req.body.description);
       }
       if (typeof req.body?.done === 'boolean') data.done = req.body.done;
-      const st = normalizeTaskStatus(req.body?.status);
-      if (st !== undefined) data.status = st;
       if (req.body?.startDate !== undefined) {
         if (req.body.startDate === null || req.body.startDate === '') {
           data.startDate = null;
@@ -186,31 +209,69 @@ export function createProjectTasksRouter(): Router {
         }
         data.assigneeId = aid;
       }
-      if (Object.keys(data).length === 0) {
+
+      const hasStatusInput =
+        req.body?.status !== undefined || req.body?.statusId !== undefined;
+
+      if (Object.keys(data).length === 0 && !hasStatusInput) {
         res.status(400).json({ message: 'No changes' });
         return;
       }
-      let nextStatus = existing.status;
-      let nextDone = existing.done;
-      if (data.status !== undefined) {
-        nextStatus = data.status;
-        nextDone = data.status === 'done';
-      }
-      if (data.done !== undefined) {
-        nextDone = data.done;
-        if (data.status === undefined) {
-          if (data.done) nextStatus = 'done';
-          else if (existing.status === 'done') nextStatus = 'todo';
+
+      const statuses = await listProjectWorkflowStatuses(access.project.id, true);
+      const activeStatuses = statuses.filter((s) => !s.isArchived);
+      const completedStatus = activeStatuses.find((s) => s.isCompleted) ?? null;
+      const activeNonCompletedStatus =
+        activeStatuses.find((s) => !s.isCompleted) ?? null;
+
+      let nextStatus = existing.workflowStatus ?? null;
+
+      if (hasStatusInput) {
+        const resolved = await resolveWorkflowStatusInput({
+          projectId: access.project.id,
+          statusId: req.body?.statusId,
+          statusKey: req.body?.status,
+        });
+        if (!resolved) {
+          res.status(400).json({ message: 'Invalid status' });
+          return;
         }
+        nextStatus = resolved;
       }
-      if (data.status !== undefined || data.done !== undefined) {
-        data.status = nextStatus;
-        data.done = nextDone;
+
+      if (!nextStatus) {
+        nextStatus = pickDefaultWorkflowStatus(statuses);
       }
+
+      if (data.done === true) {
+        if (!completedStatus) {
+          res.status(400).json({ message: 'No completed status configured' });
+          return;
+        }
+        nextStatus = completedStatus;
+      } else if (data.done === false && nextStatus.isCompleted) {
+        if (!activeNonCompletedStatus) {
+          res.status(400).json({
+            message: 'No non-completed status configured',
+          });
+          return;
+        }
+        nextStatus = activeNonCompletedStatus;
+      }
+
+      if (hasStatusInput || data.done !== undefined) {
+        data.statusId = nextStatus.id;
+        data.status = nextStatus.key;
+        data.done = nextStatus.isCompleted;
+      }
+
       const task = await prisma.task.update({
         where: { id: existing.id },
         data,
-        include: { assignee: { select: { id: true, email: true } } },
+        include: {
+          assignee: { select: { id: true, email: true } },
+          workflowStatus: true,
+        },
       });
       res.json(taskJson(task));
     }

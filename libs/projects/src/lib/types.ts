@@ -11,19 +11,24 @@ export type Project = {
   currentUserRole?: ProjectRole;
 };
 
-export type TaskStatus =
-  | 'todo'
-  | 'in_progress'
-  | 'review'
-  | 'done'
-  | 'cancelled';
+export type WorkflowStatus = {
+  id: string;
+  key: string;
+  name: string;
+  order: number;
+  isCompleted: boolean;
+  color: string | null;
+  isArchived: boolean;
+};
 
 export type Task = {
   id: string;
   title: string;
   description: string | null;
   done: boolean;
-  status: TaskStatus;
+  status: string;
+  statusId: string | null;
+  workflowStatus: WorkflowStatus | null;
   startDate: string | null;
   endDate: string | null;
   assigneeId: string | null;
